@@ -2,6 +2,7 @@
 using BlogAPI.Models;
 using BlogAPI.Models.Entities;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -27,33 +28,78 @@ namespace BlogAPI.Controllers
 
 
         [HttpPost("register")]
-        public async Task<IActionResult> Register(UserDto userDto)
+        public async Task<IActionResult> Register(UserDto registerDto)
         {
-            //throw new NotImplementedException();
-            var existingUser = await _context.Users.SingleOrDefaultAsync(u => u.Email == userDto.Email);
-            if (existingUser != null) return BadRequest("User already exists");
+            // Hash the password before storing it in the database
+            var hashedPassword = BCrypt.Net.BCrypt.HashPassword(registerDto.Password);
 
             var user = new User
             {
-                Username = userDto.Username,
-                Email = userDto.Email,
-                PasswordHash = HashPassword(userDto.Password)
+                Username = registerDto.Username,
+                Email = registerDto.Email,
+                PasswordHash = hashedPassword
             };
 
+            // Save user to the database
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
-            return Ok("User registered successfully");
+
+            return Ok(new { message = "User registered successfully" });
         }
+
+
+        //public async Task<IActionResult> Register(UserDto userDto)
+        //{
+        //    //throw new NotImplementedException();
+        //    var existingUser = await _context.Users.SingleOrDefaultAsync(u => u.Email == userDto.Email);
+        //    if (existingUser != null) return BadRequest("User already exists");
+
+        //    var user = new User
+        //    {
+        //        Username = userDto.Username,
+        //        Email = userDto.Email,
+        //        PasswordHash = HashPassword(userDto.Password)
+        //    };
+
+        //    _context.Users.Add(user);
+        //    await _context.SaveChangesAsync();
+        //    return Ok("User registered successfully");
+        //}
 
         [HttpPost("login")]
         public async Task<IActionResult> Login(LoginDto loginDto)
         {
-            var user = await _context.Users.SingleOrDefaultAsync(u => u.Email == loginDto.Email);
-            if (user == null || !VerifyPassword(loginDto.Password, user.PasswordHash)) return Unauthorized("Invalid credentials");
+            // Find the user by username or email
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == loginDto.Username);
 
+            if (user == null)
+            {
+                return Unauthorized("Invalid credentials");
+            }
+
+            // Verify the provided password against the stored hashed password
+            bool isPasswordValid = BCrypt.Net.BCrypt.Verify(loginDto.Password, user.PasswordHash);
+
+            if (!isPasswordValid)
+            {
+                return Unauthorized("Invalid credentials");
+            }
+
+            // Generate JWT token (or handle session as per your logic)
             var token = GenerateJwtToken(user);
-            return Ok(new { Token = token });
+
+            return Ok(new { token });
         }
+
+
+        //public async Task<IActionResult> Login(LoginDto loginDto)
+        //{
+        //    var user = await _context.Users.SingleOrDefaultAsync(u => u.Email == loginDto.Email);
+        //    if (user == null || !VerifyPassword(loginDto.Password, user.PasswordHash)) return Unauthorized("Invalid credentials");
+
+        //    var token = GenerateJwtToken(user);
+        //    return Ok(new { Token = token });
+        //}
 
         private string GenerateJwtToken(User user)
         {
@@ -68,7 +114,7 @@ namespace BlogAPI.Controllers
             var token = new JwtSecurityToken(_config["Jwt:Issuer"],
                 _config["Jwt:Issuer"],
                 claims,
-                expires: DateTime.Now.AddMinutes(30),
+                expires: DateTime.Now.AddMinutes(60),
                 signingCredentials: credentials);
 
             return new JwtSecurityTokenHandler().WriteToken(token);
