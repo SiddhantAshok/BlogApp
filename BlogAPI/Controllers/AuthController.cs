@@ -29,7 +29,7 @@ namespace BlogAPI.Controllers
         [HttpPost("register")]
         public async Task<IActionResult> Register(UserDto userDto)
         {
-            throw new NotImplementedException();
+            //throw new NotImplementedException();
             var existingUser = await _context.Users.SingleOrDefaultAsync(u => u.Email == userDto.Email);
             if (existingUser != null) return BadRequest("User already exists");
 
